@@ -23,18 +23,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          registry: docker.io
-          username: upstager
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: |
-            ghcr.io/wolfpicks/upstager-splat-worker:latest
-            docker.io/upstager/upstager-splat-worker:latest
+          tags: ghcr.io/wolfpicks/upstager-splat-worker:latest
