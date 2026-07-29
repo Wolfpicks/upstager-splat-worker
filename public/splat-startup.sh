@@ -1,50 +1,51 @@
 #!/bin/bash
-set -euo pipefail
+# Bootstrap script for ubuntu:22.04 GPU pod — processes video into 3D splat
 
-echo "=== Micro GPU Worker ==="
-echo "[1/4] Installing CUDA + system deps (this takes ~3 min)..."
-apt-get update -qq
-apt-get install -y -qq --no-install-recommends \
-    wget ffmpeg python3-pip python3-dev git build-essential \
-    libgl1-mesa-glx libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+echo "=== STEP 1: System deps ==="
+apt-get update -qq 2>&1 | tail -1
+apt-get install -y -qq --no-install-recommends wget ffmpeg git build-essential libgl1-mesa-glx libglib2.0-0 2>&1 | tail -1
+echo "DONE: system deps"
 
-# Install CUDA toolkit
+echo "=== STEP 2: Python ==="
+apt-get install -y -qq --no-install-recommends python3-pip python3-dev 2>&1 | tail -1
+echo "DONE: python"
+
+echo "=== STEP 3: CUDA 12.1 ==="
 wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-dpkg -i cuda-keyring_1.1-1_all.deb
-apt-get update -qq
-apt-get install -y -qq --no-install-recommends cuda-toolkit-12-1
+dpkg -i cuda-keyring_1.1-1_all.deb 2>&1 | tail -1
+apt-get update -qq 2>&1 | tail -1
+apt-get install -y -qq --no-install-recommends cuda-toolkit-12-1 2>&1 | tail -1
+echo "DONE: CUDA"
 
-echo "[2/4] Installing PyTorch + nerfstudio..."
-pip3 install --no-cache-dir -q torch torchvision --index-url https://download.pytorch.org/whl/cu121
-pip3 install --no-cache-dir -q nerfstudio gsplat
+echo "=== STEP 4: PyTorch + nerfstudio ==="
+pip3 install --no-cache-dir -q torch torchvision --index-url https://download.pytorch.org/whl/cu121 2>&1 | tail -3
+pip3 install --no-cache-dir -q nerfstudio gsplat 2>&1 | tail -3
+echo "DONE: ML stack"
 
-echo "[3/4] Downloading video..."
+echo "=== STEP 5: Download video ==="
 curl -fsSL -o /workspace/video.mp4 "$VIDEO_URL"
-echo "       Downloaded: $(ls -lh /workspace/video.mp4 | awk '{print $5}')"
+ls -lh /workspace/video.mp4
+echo "DONE: video"
 
-echo "[4/4] Processing — COLMAP → gsplat → .ply"
-mkdir -p /workspace
+echo "=== STEP 6: Process splat ==="
+mkdir -p /workspace/processed /workspace/outputs /workspace/exports
+ns-process-data video --data /workspace/video.mp4 --output-dir /workspace/processed --num-frames-target 150 2>&1 | tail -5
+echo "DONE: COLMAP"
 
-ns-process-data video \
-    --data /workspace/video.mp4 \
-    --output-dir /workspace/processed \
-    --num-frames-target 150
+echo "=== STEP 7: Train gsplat ==="
+ns-train splatfacto --data /workspace/processed --output-dir /workspace/outputs --max-num-iterations 7000 2>&1 | tail -10
+echo "DONE: training"
 
-ns-train splatfacto \
-    --data /workspace/processed \
-    --output-dir /workspace/outputs \
-    --max-num-iterations 7000 \
-    --pipeline.model.cull-alpha-thresh 0.005 \
-    --pipeline.model.densify-grad-thresh 0.0002
-
+echo "=== STEP 8: Export .ply ==="
 CONFIG=$(ls /workspace/outputs/*/config.yml 2>/dev/null | head -1)
-ns-export gaussian-splat --load-config "$CONFIG" --output-dir /workspace/exports/
+ns-export gaussian-splat --load-config "$CONFIG" --output-dir /workspace/exports/ 2>&1 | tail -3
+PLY=$(find /workspace/exports -name "*.ply" | head -1)
+ls -lh "$PLY"
+echo "DONE: export"
 
-PLY=$(find /workspace/exports -name "*.ply" 2>/dev/null | head -1)
-echo "Splat ready: $(ls -lh "$PLY" | awk '{print $5}')"
-
-echo "Uploading to $CALLBACK_URL..."
+echo "=== STEP 9: Upload ==="
 curl -s -X POST -F "splat=@$PLY" -F "orderId=$ORDER_ID" "$CALLBACK_URL"
+echo "DONE: uploaded"
 
-echo "=== Done ==="
+echo "=== ALL DONE ==="
+sleep 30
