@@ -1,9 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
+# COLMAP needs a virtual display — use offscreen Qt rendering
+export QT_QPA_PLATFORM=offscreen
+
 # Source conda environment (runpod/pytorch uses conda)
-source /opt/conda/bin/activate || true
-export PATH="/opt/conda/bin:$PATH"
+source /opt/conda/bin/activate 2>/dev/null || true
+export PATH="/opt/conda/bin:/usr/local/bin:$PATH"
 
 echo "[splat] Starting order=$ORDER_ID"
 echo "[splat] ns-process-data: $(which ns-process-data 2>&1)"
