@@ -68,6 +68,7 @@ print(msg)
 
 # ── [3/4] Download video ──
 echo "[3/4] Downloading video..."
+mkdir -p /workspace
 curl -fsSL --connect-timeout 60 --max-time 300 --retry 3 --retry-delay 10 \
     -o /workspace/video.mp4 "$VIDEO_URL" \
     || report_failure "download" "video download failed"
