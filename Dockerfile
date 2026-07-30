@@ -26,8 +26,9 @@ RUN pip3 install --no-cache-dir \
 RUN pip3 install --no-cache-dir \
     nerfstudio==1.1.5 gsplat==1.4.0
 
-# Verify
-RUN python3 -c "import torch, gsplat; assert torch.cuda.is_available(); print(f'torch={torch.__version__} gsplat={gsplat.__version__} CUDA OK')"
+# Verify imports (CUDA not available at build time — tested at runtime on GPU)
+RUN python3 -c "import torch; print(f'torch={torch.__version__}')" && \
+    python3 -c "import gsplat; print(f'gsplat={gsplat.__version__}')"
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
