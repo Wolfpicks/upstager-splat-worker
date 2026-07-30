@@ -61,7 +61,7 @@ echo "[check] verifying installation..."
 python3 -c "
 import torch, gsplat
 msg = f'torch={torch.__version__} gsplat={gsplat.__version__} cuda_ok={torch.cuda.is_available()}'
-assert torch.__version__ == '2.3.1', f'wrong torch: {torch.__version__}'
+assert torch.__version__.startswith('2.3.1'), f'wrong torch: {torch.__version__}'
 assert torch.cuda.is_available(), 'CUDA not available'
 print(msg)
 " || report_failure "check" "Python sanity check failed"
