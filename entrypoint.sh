@@ -10,7 +10,6 @@ Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX +render &
 # Wait for Xvfb to be ready
 for i in $(seq 1 20); do xdpyinfo -display :99 >/dev/null 2>&1 && break; sleep 0.5; done
 # Disable PyTorch inductor compiler (prevents "duplicate template name" crash)
-export TORCHDYNAMO_DISABLE=1
 sleep 1
 
 # Source conda environment (runpod/pytorch uses conda)
