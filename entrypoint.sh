@@ -1,8 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-# COLMAP needs a virtual display — use offscreen Qt rendering
-export QT_QPA_PLATFORM=offscreen
+# Start virtual display for COLMAP's Qt + OpenGL
+export DISPLAY=:99
+Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX +render &
+sleep 1
 
 # Source conda environment (runpod/pytorch uses conda)
 source /opt/conda/bin/activate 2>/dev/null || true
