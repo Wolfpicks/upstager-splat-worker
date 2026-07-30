@@ -18,6 +18,11 @@ report_failure() {
 
 echo "=== Micro GPU Worker v17 ==="
 
+# ── Env setup ──
+export TORCH_CUDA_ARCH_LIST="8.6"
+export TORCHDYNAMO_DISABLE="1"
+export MAX_JOBS="4"
+
 # ── [1/4] System deps ──
 echo "[1/4] Installing system dependencies (this takes ~3 min)..."
 apt-get update -qq
@@ -42,7 +47,10 @@ if ! command -v nvcc &>/dev/null; then
     || report_failure "cuda-toolkit" "CUDA toolkit install failed"
   rm -f cuda-keyring_1.1-1_all.deb
 fi
-echo "[1/4] nvcc: $(which nvcc 2>/dev/null || echo 'N/A')"
+echo "[1/4] nvcc: $(which nvcc 2>/dev/null || echo 'N/A (adding PATH)')"
+export PATH="/usr/local/cuda-12.1/bin:$PATH"
+export CUDA_HOME="/usr/local/cuda-12.1"
+echo "[1/4] nvcc (fixed): $(which nvcc 2>/dev/null || echo 'STILL MISSING')"
 
 # ── [2/4] Python deps — PINNED versions ──
 echo "[2/4] Installing PyTorch + nerfstudio + gsplat..."
