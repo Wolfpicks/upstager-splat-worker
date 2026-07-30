@@ -52,7 +52,7 @@ pip3 install --no-cache-dir -q \
     || report_failure "pip-torch" "torch install failed"
 
 pip3 install --no-cache-dir -q \
-    nerfstudio==1.1.5 gsplat==1.3.2 \
+    nerfstudio==1.1.5 gsplat==1.4.0 \
     torch==2.3.1 torchvision==0.18.1 \
     || report_failure "pip-nerfstudio" "nerfstudio/gsplat install failed"
 
