@@ -27,7 +27,7 @@ echo "[splat] COLMAP..."
 ns-process-data video --data /workspace/video.mp4 --output-dir /workspace/processed/ --num-frames-target 150
 
 echo "[splat] Training gsplat (7000 iters)..."
-ns-train splatfacto --data /workspace/processed/ --output-dir /workspace/outputs/ --max-num-iterations 7000 --pipeline.model.cull-alpha-thresh 0.005 --pipeline.model.densify-grad-thresh 0.0002
+ns-train splatfacto --viewer.quit-on-train-completion True --data /workspace/processed/ --output-dir /workspace/outputs/ --max-num-iterations 7000 --pipeline.model.cull-alpha-thresh 0.005 --pipeline.model.densify-grad-thresh 0.0002
 
 echo "[splat] Exporting .ply..."
 CONFIG=$(ls /workspace/outputs/*/config.yml 2>/dev/null | head -1)
