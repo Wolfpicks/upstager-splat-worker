@@ -25,4 +25,4 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ghcr.io/wolfpicks/upstager-splat-worker:v17-${{ github.sha }}
+          tags: ghcr.io/wolfpicks/upstager-splat-worker:v18-${{ github.sha }}
