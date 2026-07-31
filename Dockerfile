@@ -1,11 +1,11 @@
 FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
 
-# COLMAP + system deps
+# COLMAP + system deps (includes GLX support for headless GPU SIFT)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     colmap ffmpeg curl wget \
     python3-pip python3-dev python3-venv \
     git build-essential ninja-build cmake \
-    libgl1 libgl1-mesa-glx libglib2.0-0 \
+    libgl1 libgl1-mesa-glx libegl1-mesa libglib2.0-0 \
     libsm6 libxext6 libxrender-dev \
     mesa-utils x11-utils xvfb \
     && rm -rf /var/lib/apt/lists/*
@@ -22,16 +22,26 @@ RUN pip3 install --no-cache-dir \
     torch==2.3.1 torchvision==0.18.1 \
     --index-url https://download.pytorch.org/whl/cu121
 
-# nerfstudio + gsplat (pinned)
+# nerfstudio + gsplat + pipeline deps (pinned)
 RUN pip3 install --no-cache-dir \
-    nerfstudio==1.1.5 gsplat==1.4.0
+    nerfstudio==1.1.5 gsplat==1.4.0 \
+    opencv-python-headless==4.9.0.80 \
+    scikit-image==0.23.2 \
+    plyfile==1.0.3 \
+    boto3
 
 # Verify imports (CUDA not available at build time — tested at runtime on GPU)
 RUN python3 -c "import torch; print(f'torch={torch.__version__}')" && \
-    python3 -c "import gsplat; print(f'gsplat={gsplat.__version__}')"
+    python3 -c "import gsplat; print(f'gsplat={gsplat.__version__}')" && \
+    python3 -c "import cv2; print(f'cv2={cv2.__version__}')" && \
+    python3 -c "import skimage; print('skimage OK')" && \
+    python3 -c "import plyfile; print('plyfile OK')"
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Stage-local Python scripts (sharp-frame, cleanup, QC)
+COPY pipeline_scripts/ /app/pipeline_scripts/
 
 WORKDIR /workspace
 ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]
