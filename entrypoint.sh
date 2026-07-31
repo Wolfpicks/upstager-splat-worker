@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Upstager splat worker entrypoint (v19 — Fable runbook merge)
-# Adds: sharp-frame selection, splatfacto-big + bilateral grid, gaussian cleanup,
-#       .splat conversion, QC scoring via ns-eval
+# Adds: sharp-frame selection, explicit COLMAP SfM pipeline, splatfacto-big + bilateral grid,
+#       gaussian cleanup, .splat conversion, QC scoring via ns-eval
 # Kept from v18: full logging, xvfb for headless COLMAP, guaranteed failure cb,
 #       COLMAP output verification, per-stage timeouts, SLEEP_ON_DONE
-# TODO: replace COLMAP mapper with GLOMAP for 10-50x speedup on low-texture scenes
+# TODO: GLOMAP global mapper for 10-50x SfM speedup — build fails on GH Actions CI.
+#       Once COLMAP ≥3.10 is available via apt/pip, switch mapper type to "global".
 set -Eeuo pipefail
 # ---------- required env ----------
 : "${VIDEO_URL:?VIDEO_URL not set}"
@@ -117,8 +118,9 @@ export DISPLAY=:99
 export QT_QPA_PLATFORM=offscreen
 sleep 2
 
-# ---------- stage 5: COLMAP feature extraction + matching + GLOMAP mapper ----------
-# GLOMAP replaces COLMAP's incremental mapper — 10-50x faster, robust on low-texture indoor scenes
+# ---------- stage 5: COLMAP feature extraction + matching + mapper ----------
+# Explicit pipeline: feature extraction (GPU SIFT) → sequential matching → mapper
+# Uses COLMAP sequential (good for video — GLOMAP would help for unordered photo sets)
 STAGE="colmap_features"
 DB="$WORK/sfm/database.db"
 SFM_DIR="$WORK/sfm/sparse"
@@ -141,29 +143,27 @@ timeout --signal=TERM "$COLMAP_TIMEOUT" \
     --SequentialMatching.loop_detection 1 \
     --SiftMatching.use_gpu 1
 
-STAGE="glomap"
-log "GLOMAP global mapper (replaces COLMAP incremental)..."
+STAGE="colmap_map"
+log "COLMAP mapper (sequential, GPU-accelerated)..."
 timeout --signal=TERM "$COLMAP_TIMEOUT" \
-  glomap mapper \
+  colmap mapper \
     --database_path "$DB" \
     --image_path "$WORK/sharp" \
     --output_path "$SFM_DIR"
 
-# ---------- COLMAP/GLOMAP output verification ----------
+# ---------- COLMAP output verification ----------
 STAGE="sfm_verify"
-[ -d "$SFM_DIR/0" ] || { report_failure "no_sparse_model_from_glomap"; exit 1; }
-# Count registered images from the sparse model
+[ -d "$SFM_DIR/0" ] || { report_failure "no_sparse_model"; exit 1; }
 REG_COUNT=$(colmap model_analyzer --path "$SFM_DIR/0" 2>&1 | grep -oP 'Registered images[:\s]+\K\d+' || echo 0)
 REG_RATE=$(python3 -c "print(f'{int($REG_COUNT) / max($SHARP_COUNT, 1) * 100:.0f}%')" 2>/dev/null || echo "?")
-log "Sharp frames: $SHARP_COUNT | GLOMAP-registered: $REG_COUNT (${REG_RATE})"
-# Require ≥50% registration rate
+log "Sharp frames: $SHARP_COUNT | COLMAP-registered: $REG_COUNT (${REG_RATE})"
 MIN_REG=$(( SHARP_COUNT / 2 ))
-[ "$REG_COUNT" -ge "$MIN_REG" ] || { report_failure "glomap_registration_too_low_${REG_COUNT}_of_${SHARP_COUNT}"; exit 1; }
+[ "$REG_COUNT" -ge "$MIN_REG" ] || { report_failure "registration_too_low_${REG_COUNT}_of_${SHARP_COUNT}"; exit 1; }
 log "Sparse model contents:"; ls -la "$SFM_DIR/0" || true
 
-# Feed GLOMAP result into nerfstudio (skip COLMAP since we already ran it)
+# Feed COLMAP result into nerfstudio (skip COLMAP since we already ran it)
 STAGE="ns_process"
-log "Processing GLOMAP result for nerfstudio..."
+log "Processing COLMAP result for nerfstudio..."
 ns-process-data images \
     --data "$WORK/sharp" \
     --output-dir "$WORK/processed" \

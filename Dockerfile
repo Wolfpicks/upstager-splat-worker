@@ -1,31 +1,14 @@
 FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
 
 # COLMAP + system deps (includes GLX support for headless GPU SIFT)
-# GLOMAP deps: need cmake ≥3.28 for FetchContent auto-build of COLMAP + PoseLib
 RUN apt-get update && apt-get install -y --no-install-recommends \
     colmap ffmpeg curl wget \
     python3-pip python3-dev python3-venv \
-    git build-essential ninja-build \
+    git build-essential ninja-build cmake \
     libgl1 libgl1-mesa-glx libegl1-mesa libglib2.0-0 \
     libsm6 libxext6 libxrender-dev \
     mesa-utils x11-utils xvfb \
-    libboost-filesystem-dev libboost-program-options-dev libboost-graph-dev \
-    libceres-dev libeigen3-dev libfreeimage-dev \
     && rm -rf /var/lib/apt/lists/*
-
-# cmake ≥3.28 required for GLOMAP FetchContent (Ubuntu 22.04 ships 3.22)
-# Pre-built binary — bootstrap from source segfaults on GH Actions runners
-RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.30.1/cmake-3.30.1-linux-x86_64.tar.gz && \
-    tar xf cmake-3.30.1-linux-x86_64.tar.gz -C /usr/local --strip-components=1 && \
-    rm cmake-3.30.1-linux-x86_64.tar.gz
-
-# GLOMAP — global SfM mapper (10-50x faster than COLMAP incremental, robust on low-texture indoors)
-# Builds as standalone binary; FetchContent auto-downloads COLMAP + PoseLib at cmake time
-# -j2 limits memory on GH Actions runners (7GB); COLMAP FetchContent is heavy
-RUN git clone --depth 1 https://github.com/colmap/glomap.git /opt/glomap && \
-    cmake -S /opt/glomap -B /opt/glomap/build -GNinja -DCMAKE_BUILD_TYPE=Release && \
-    ninja -C /opt/glomap/build -j2 && ninja -C /opt/glomap/build install && \
-    rm -rf /opt/glomap
 
 # CUDA env
 ENV CUDA_HOME=/usr/local/cuda-12.1
