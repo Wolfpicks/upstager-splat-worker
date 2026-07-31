@@ -28,7 +28,7 @@ STAGE="startup"
 DONE=0
 mkdir -p "$WORK"
 # Wipe stale state from previous restarts (persistent /workspace volume)
-rm -rf "$WORK/frames" "$WORK/sharp" "$WORK/processed" "$WORK/outputs" "$WORK/exports" "$WORK/video.mp4"
+rm -rf "$WORK/frames" "$WORK/sharp" "$WORK/sfm" "$WORK/processed" "$WORK/outputs" "$WORK/exports" "$WORK/video.mp4"
 : > "$LOG"
 # ---------- FIX 1: tee ALL output to log ----------
 exec > >(tee -a "$LOG") 2>&1
@@ -117,29 +117,60 @@ export DISPLAY=:99
 export QT_QPA_PLATFORM=offscreen
 sleep 2
 
-# ---------- stage 5: COLMAP via ns-process-data images ----------
-STAGE="colmap"
-log "Running COLMAP SfM on $SHARP_COUNT sharp frames (timeout ${COLMAP_TIMEOUT}s)..."
+# ---------- stage 5: COLMAP feature extraction + matching + GLOMAP mapper ----------
+# GLOMAP replaces COLMAP's incremental mapper — 10-50x faster, robust on low-texture indoor scenes
+STAGE="colmap_features"
+DB="$WORK/sfm/database.db"
+SFM_DIR="$WORK/sfm/sparse"
+mkdir -p "$(dirname "$DB")" "$SFM_DIR"
+log "COLMAP feature extraction on $SHARP_COUNT sharp frames..."
 timeout --signal=TERM "$COLMAP_TIMEOUT" \
-  ns-process-data images \
+  colmap feature_extractor \
+    --database_path "$DB" \
+    --image_path "$WORK/sharp" \
+    --ImageReader.camera_model OPENCV \
+    --ImageReader.single_camera 1 \
+    --SiftExtraction.use_gpu 1
+
+STAGE="colmap_match"
+log "COLMAP sequential matching..."
+timeout --signal=TERM "$COLMAP_TIMEOUT" \
+  colmap sequential_matcher \
+    --database_path "$DB" \
+    --SequentialMatching.overlap 15 \
+    --SequentialMatching.loop_detection 1 \
+    --SiftMatching.use_gpu 1
+
+STAGE="glomap"
+log "GLOMAP global mapper (replaces COLMAP incremental)..."
+timeout --signal=TERM "$COLMAP_TIMEOUT" \
+  glomap mapper \
+    --database_path "$DB" \
+    --image_path "$WORK/sharp" \
+    --output_path "$SFM_DIR"
+
+# ---------- COLMAP/GLOMAP output verification ----------
+STAGE="sfm_verify"
+[ -d "$SFM_DIR/0" ] || { report_failure "no_sparse_model_from_glomap"; exit 1; }
+# Count registered images from the sparse model
+REG_COUNT=$(colmap model_analyzer --path "$SFM_DIR/0" 2>&1 | grep -oP 'Registered images[:\s]+\K\d+' || echo 0)
+REG_RATE=$(python3 -c "print(f'{int($REG_COUNT) / max($SHARP_COUNT, 1) * 100:.0f}%')" 2>/dev/null || echo "?")
+log "Sharp frames: $SHARP_COUNT | GLOMAP-registered: $REG_COUNT (${REG_RATE})"
+# Require ≥50% registration rate
+MIN_REG=$(( SHARP_COUNT / 2 ))
+[ "$REG_COUNT" -ge "$MIN_REG" ] || { report_failure "glomap_registration_too_low_${REG_COUNT}_of_${SHARP_COUNT}"; exit 1; }
+log "Sparse model contents:"; ls -la "$SFM_DIR/0" || true
+
+# Feed GLOMAP result into nerfstudio (skip COLMAP since we already ran it)
+STAGE="ns_process"
+log "Processing GLOMAP result for nerfstudio..."
+ns-process-data images \
     --data "$WORK/sharp" \
     --output-dir "$WORK/processed" \
+    --skip-colmap \
+    --colmap-model-path "$SFM_DIR/0" \
     --verbose
-
-# ---------- COLMAP output verification ----------
-STAGE="colmap_verify"
-log "Verifying COLMAP output structure..."
-[ -f "$WORK/processed/transforms.json" ] || { report_failure "missing_transforms_json"; exit 1; }
-IMG_COUNT=$(find "$WORK/processed/images" -maxdepth 1 -type f \( -name '*.jpg' -o -name '*.png' \) 2>/dev/null | wc -l)
-REG_COUNT=$(python3 -c "import json;print(len(json.load(open('$WORK/processed/transforms.json'))['frames']))" 2>/dev/null || echo 0)
-REG_RATE=$(python3 -c "print(f'{$REG_COUNT / max($SHARP_COUNT, 1) * 100:.0f}%')" 2>/dev/null || echo "?")
-log "Sharp frames: $SHARP_COUNT | COLMAP-registered: $REG_COUNT (${REG_RATE})"
-# Require ≥50% registration rate — below that, splat quality is poor
-MIN_REG=$(( SHARP_COUNT / 2 ))
-[ "$REG_COUNT" -ge "$MIN_REG" ] || { report_failure "registration_too_low_${REG_COUNT}_of_${SHARP_COUNT}"; exit 1; }
-if [ -d "$WORK/processed/colmap/sparse/0" ]; then
-  log "Sparse model contents:"; ls -la "$WORK/processed/colmap/sparse/0"
-fi
+[ -f "$WORK/processed/transforms.json" ] || { report_failure "ns_process_failed"; exit 1; }
 
 # ---------- stage 6: train splatfacto-big (Fable §3d) ----------
 # splatfacto-big: more capacity, bilateral grid handles uneven lighting
