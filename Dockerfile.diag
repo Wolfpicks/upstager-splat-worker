@@ -1,0 +1,4 @@
+FROM ghcr.io/wolfpicks/upstager-splat-worker:v18-2548632aca86f119312e1d896cc8029f5afa1bb9
+COPY diag.sh /diag.sh
+RUN chmod +x /diag.sh
+ENTRYPOINT ["/bin/bash", "/diag.sh"]

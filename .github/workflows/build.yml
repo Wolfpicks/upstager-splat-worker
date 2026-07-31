@@ -26,3 +26,11 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ghcr.io/wolfpicks/upstager-splat-worker:v18-${{ github.sha }}
+
+      - name: Build and push diag
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.diag
+          push: true
+          tags: ghcr.io/wolfpicks/upstager-splat-worker:diag-${{ github.sha }}
