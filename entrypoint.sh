@@ -122,10 +122,7 @@ timeout --signal=TERM "$TRAIN_TIMEOUT" \
   ns-train splatfacto \
     --data "$WORK/processed" \
     --output-dir "$WORK/outputs" \
-    --max-num-iterations "$MAX_ITERS" \
-    --viewer.quit-on-train-completion True \
-
-    --vis viewer
+    --max-num-iterations "$MAX_ITERS"
 # ---------- stage 5: export ----------
 STAGE="export"
 # Nerfstudio nests config at outputs/<experiment>/splatfacto/<timestamp>/config.y
