@@ -22,12 +22,12 @@ RUN pip3 install --no-cache-dir \
     torch==2.3.1 torchvision==0.18.1 \
     --index-url https://download.pytorch.org/whl/cu121
 
-# nerfstudio + gsplat + pipeline deps (pinned)
+# nerfstudio + gsplat + pipeline deps (pinned where critical)
 RUN pip3 install --no-cache-dir \
     nerfstudio==1.1.5 gsplat==1.4.0 \
-    opencv-python-headless==4.9.0.80 \
-    scikit-image==0.23.2 \
-    plyfile==1.0.3 \
+    opencv-python-headless \
+    scikit-image \
+    plyfile \
     boto3
 
 # Verify imports (CUDA not available at build time — tested at runtime on GPU)
